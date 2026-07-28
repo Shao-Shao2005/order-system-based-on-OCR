@@ -1,0 +1,33 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Runtime data
+cache/
+outputs/
+uploads/
+*.json
+
+# IDE / Editor
+.vscode/
+.idea/
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test files
+api_test*.json
+送货单/
+
+# Third-party (installed separately)
+PaddleOCR/
+
+# Archive
+*.zip

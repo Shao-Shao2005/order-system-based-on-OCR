@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>预览修正 - 送货单OCR识别</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="preview-container">
+        <!-- 顶部导航 -->
+        <div class="top-bar">
+            <div>
+                <h4 class="mb-0">数据预览与修正</h4>
+                <small class="text-muted">{{ filename }}</small>
+            </div>
+            <div class="top-bar-actions">
+                <button id="add-row-btn" class="btn btn-outline-secondary btn-sm">+ 添加行</button>
+                <button id="export-btn" class="btn btn-success">📥 导出Excel</button>
+            </div>
+        </div>
+
+        <!-- 警告信息 -->
+        <div id="warnings-area">
+            {% if warnings %}
+            <div class="alert alert-warning alert-dismissible fade show py-2 mb-0" role="alert">
+                ⚠️ {{ warnings|join('；') }}
+                <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 主体：左侧图片 + 右侧送货单 -->
+        <div class="main-content">
+            <!-- 左侧：原始图片 -->
+            <div class="left-panel">
+                <div class="card shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <span class="fw-medium">原始图片</span>
+                        <div id="page-nav" class="btn-group btn-group-sm"></div>
+                    </div>
+                    <div class="card-body p-2 text-center bg-dark rounded-bottom">
+                        <img id="preview-img" src="" class="img-fluid rounded" alt="原始图片">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：送货单格式预览 -->
+            <div class="right-panel">
+                <div class="delivery-slip">
+                    <!-- ===== 头部信息 ===== -->
+                    <div class="slip-header">
+                        <!-- 公司名称：居中加粗 -->
+                        <div class="slip-company">
+                            <input id="header-company" type="text"
+                                   placeholder="公司名称（自动识别）">
+                        </div>
+
+                        <!-- 收货单位（左） + 送货日期（右） -->
+                        <div class="slip-info-row">
+                            <div class="slip-consignee">
+                                <label>收货单位：</label>
+                                <input id="header-consignee" type="text"
+                                       placeholder="铁科嘉苑饭店">
+                            </div>
+                            <div class="slip-date">
+                                <label>送货日期：</label>
+                                <input id="header-date" type="text"
+                                       placeholder="自动识别">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== 数据表格 ===== -->
+                    <div class="slip-table-wrapper">
+                        <table id="data-table">
+                            <thead>
+                                <tr>
+                                    <th class="seq-col">序号</th>
+                                    <th class="name-col">名称</th>
+                                    <th class="unit-col">单位</th>
+                                    <th class="price-col">购定价<br>（含税）</th>
+                                    <th class="tax-col">税率</th>
+                                    <th class="query-col">网上询价</th>
+                                    <th class="qty-col">数量</th>
+                                    <th class="total-col">合计</th>
+                                    <th class="remark-col">备注</th>
+                                    <th class="action-col">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 行数标识 -->
+                <div class="slip-footer">
+                    <span id="row-count" class="badge bg-secondary"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出状态提示 -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999;">
+        <div id="export-toast" class="toast align-items-center text-bg-success border-0" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">Excel导出成功！</div>
+                <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.TASK_ID = "{{ task_id }}";
+    </script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

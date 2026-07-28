@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>送货单OCR识别系统</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container py-5">
+        <!-- 头部 -->
+        <div class="text-center mb-5">
+            <h1 class="fw-bold text-primary">送货单OCR识别系统</h1>
+            <p class="text-muted">上传送货单PDF或图片，自动识别并导出Excel</p>
+        </div>
+
+        <!-- 上传区域 -->
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div id="upload-zone" class="card shadow-sm">
+                    <div class="card-body p-5 text-center">
+                        <!-- 拖拽上传区 -->
+                        <div id="drop-area" class="border border-2 border-dashed rounded-3 p-5 mb-3">
+                            <div class="mb-3">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="1.5">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                            </div>
+                            <h5>拖拽文件到此处</h5>
+                            <p class="text-muted mb-2">或点击下方按钮选择文件</p>
+                            <p class="text-muted small">支持 PDF / PNG / JPG / JPEG / BMP / TIFF</p>
+                            <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff,.tif" hidden>
+                            <button id="select-btn" class="btn btn-primary px-4">选择文件</button>
+                        </div>
+
+                        <!-- 已选文件信息 -->
+                        <div id="file-info" class="d-none text-start">
+                            <div class="d-flex align-items-center justify-content-between bg-light rounded-3 p-3">
+                                <div class="d-flex align-items-center">
+                                    <span id="file-icon" class="fs-4 me-2">📄</span>
+                                    <div>
+                                        <div id="file-name" class="fw-medium"></div>
+                                        <div id="file-size" class="text-muted small"></div>
+                                    </div>
+                                </div>
+                                <button id="clear-file" class="btn btn-sm btn-outline-secondary">✕</button>
+                            </div>
+                        </div>
+
+                        <!-- 上传按钮 -->
+                        <button id="upload-btn" class="btn btn-success btn-lg px-5 mt-3 d-none">
+                            开始识别
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 处理进度 -->
+                <div id="progress-area" class="d-none text-center mt-4">
+                    <div class="card shadow-sm p-4">
+                        <div class="spinner-border text-primary mb-3" role="status"></div>
+                        <h5>正在处理中...</h5>
+                        <p id="progress-msg" class="text-muted">正在进行OCR文字识别，请稍候</p>
+                    </div>
+                </div>
+
+                <!-- 结果区域 -->
+                <div id="result-area" class="d-none mt-4">
+                    <div class="card shadow-sm p-4 text-center">
+                        <div class="text-success mb-3">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                        </div>
+                        <h5>识别完成！</h5>
+                        <p id="result-msg" class="text-muted"></p>
+                        <a id="preview-link" href="#" class="btn btn-primary btn-lg mt-2">
+                            查看并修正数据 →
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 错误区域 -->
+                <div id="error-area" class="d-none mt-4">
+                    <div class="alert alert-danger">
+                        <h5 class="alert-heading">处理失败</h5>
+                        <p id="error-msg"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

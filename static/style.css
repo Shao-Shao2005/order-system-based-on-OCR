@@ -1,0 +1,313 @@
+/* ===== 全局样式 ===== */
+body {
+    background: #e8ecf1;
+    font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+}
+
+/* ===== 上传区域 ===== */
+#drop-area {
+    border-color: #dee2e6;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    background: #fafbfc;
+}
+
+#drop-area:hover,
+#drop-area.drag-over {
+    border-color: #0d6efd;
+    background: #f0f7ff;
+}
+
+#drop-area.drag-over {
+    border-style: solid;
+    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.15);
+}
+
+/* ============================================================
+   预览页面 — 送货单格式
+   ============================================================ */
+
+.preview-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 32px;
+}
+
+/* 顶部导航栏 */
+.top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 0 4px;
+}
+
+.top-bar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+#warnings-area {
+    margin-bottom: 16px;
+}
+
+/* 主内容区：左右两栏 */
+.main-content {
+    display: flex;
+    gap: 24px;
+}
+
+/* 左侧图片面板 */
+.left-panel {
+    flex: 0 0 42%;
+    max-width: 42%;
+}
+
+.left-panel img {
+    max-height: 78vh;
+    object-fit: contain;
+}
+
+/* 右侧送货单面板 */
+.right-panel {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ===== 送货单卡片 ===== */
+.delivery-slip {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+/* --- 头部信息 --- */
+.slip-header {
+    padding: 20px 28px 12px;
+    border-bottom: 2px solid #333;
+}
+
+/* 公司名称：居中加粗 */
+.slip-company {
+    text-align: center;
+    margin-bottom: 14px;
+}
+
+.slip-company input {
+    border: none;
+    background: transparent;
+    font-size: 18px;
+    font-weight: 700;
+    color: #222;
+    text-align: center;
+    width: 100%;
+    padding: 4px 8px;
+    outline: none;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.slip-company input::placeholder {
+    color: #adb5bd;
+    font-weight: 400;
+    font-size: 15px;
+}
+
+.slip-company input:focus {
+    background: #f1f3f5;
+}
+
+/* 收货单位 + 送货日期 同行 */
+.slip-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.slip-consignee {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.slip-consignee label {
+    color: #495057;
+    font-size: 14px;
+    white-space: nowrap;
+    margin: 0;
+}
+
+.slip-consignee input {
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    color: #333;
+    padding: 3px 6px;
+    outline: none;
+    border-radius: 3px;
+    min-width: 140px;
+    transition: background 0.2s;
+}
+
+.slip-consignee input:focus {
+    background: #f1f3f5;
+}
+
+.slip-date {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.slip-date label {
+    color: #495057;
+    font-size: 14px;
+    white-space: nowrap;
+    margin: 0;
+}
+
+.slip-date input {
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    color: #333;
+    text-align: right;
+    padding: 3px 6px;
+    outline: none;
+    border-radius: 3px;
+    min-width: 100px;
+    transition: background 0.2s;
+}
+
+.slip-date input:focus {
+    background: #f1f3f5;
+}
+
+/* --- 表格区域 --- */
+.slip-table-wrapper {
+    padding: 0;
+    overflow-x: auto;
+}
+
+#data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    table-layout: fixed;
+}
+
+#data-table th {
+    background: #fff;
+    color: #333;
+    font-weight: 600;
+    font-size: 12px;
+    text-align: center;
+    padding: 8px 4px;
+    border-bottom: 1px solid #333;
+    white-space: nowrap;
+}
+
+#data-table td {
+    padding: 4px 4px;
+    vertical-align: middle;
+    border-bottom: 1px solid #e9ecef;
+}
+
+#data-table td input {
+    width: 100%;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 5px 6px;
+    font-size: 13px;
+    text-align: center;
+    border-radius: 3px;
+    transition: all 0.15s;
+}
+
+#data-table td input:hover {
+    border-color: #dee2e6;
+    background: #fafbfc;
+}
+
+#data-table td input:focus {
+    border-color: #0d6efd;
+    background: #fff;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.12);
+}
+
+/* 列对齐 */
+.name-col input,
+.remark-col input {
+    text-align: left;
+}
+
+/* 列宽 */
+.seq-col { width: 42px; }
+.action-col { width: 40px; }
+.unit-col { width: 50px; }
+.tax-col { width: 48px; }
+.qty-col { width: 58px; }
+.price-col { width: 82px; }
+.total-col { width: 82px; }
+.query-col { width: 82px; }
+.name-col { width: auto; }
+.remark-col { width: auto; }
+
+/* 删除行按钮 */
+.delete-row-btn {
+    color: #dc3545;
+    cursor: pointer;
+    padding: 2px 6px;
+    border: none;
+    background: none;
+    font-size: 16px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    line-height: 1;
+}
+
+.delete-row-btn:hover {
+    opacity: 1;
+}
+
+#data-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+/* 底部 */
+.slip-footer {
+    padding: 8px 28px 12px;
+    border-top: 1px solid #e9ecef;
+    background: #fafbfc;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 992px) {
+    .preview-container {
+        padding: 12px 16px;
+    }
+
+    .main-content {
+        flex-direction: column;
+    }
+
+    .left-panel {
+        flex: 1 1 auto;
+        max-width: 100%;
+    }
+
+    .left-panel img {
+        max-height: 40vh !important;
+    }
+
+    .slip-header {
+        padding: 14px 16px 10px;
+    }
+
+    .slip-footer {
+        padding: 6px 16px 10px;
+    }
+}

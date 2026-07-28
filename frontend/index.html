@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>送货单OCR识别系统</title>
+<link rel="stylesheet" href="static/style.css">
+<script>window.API_BASE = "http://localhost:5000";</script>
+</head>
+<body>
+
+<!-- ====== 顶部模式切换 ====== -->
+<div id="mode-bar">
+    <span id="mode-title">送货单OCR识别系统</span>
+    <div id="mode-tabs">
+        <button id="btn-form-mode" class="mode-btn active">📋 表单模式</button>
+        <button id="btn-table-mode" class="mode-btn">📊 表格模式</button>
+        <button id="btn-clear-cache" title="清除服务器缓存">🗑️ 清除缓存</button>
+    </div>
+</div>
+
+<!-- ====== 表单模式 ====== -->
+<div id="form-mode" class="mode-page">
+
+    <!-- 左面板 -->
+    <div id="left-panel">
+
+        <!-- 项目侧栏 -->
+        <div id="project-sidebar">
+            <div id="sidebar-header">
+                <button id="btn-toggle-sidebar" title="收缩/展开">◀</button>
+                <span>项目列表</span>
+                <button id="btn-create-project" title="创建项目">+</button>
+            </div>
+            <div id="project-list">
+                <!-- 项目卡片动态生成 -->
+            </div>
+        </div>
+
+        <!-- 分隔拖拽条 -->
+        <div id="sidebar-resizer"></div>
+
+        <!-- 文件预览区 -->
+        <div id="preview-area">
+            <div id="preview-body">
+                <div id="preview-toolbar" style="display:none">
+                    <span id="zoom-label">100%</span>
+                    <input type="range" id="zoom-slider" min="25" max="400" value="100">
+                    <button id="btn-zoom-out">−</button>
+                    <button id="btn-zoom-in">+</button>
+                    <button id="btn-zoom-fit">适合</button>
+                    <span class="tb-sep">|</span>
+                    <button id="btn-page-prev">◀</button>
+                    <span id="page-info">1/1</span>
+                    <button id="btn-page-next">▶</button>
+                    <span class="tb-sep">|</span>
+                    <button id="btn-toggle-scan" title="切换扫描件/原始图">📷</button>
+                    <span class="tb-sep crop-only" style="display:none">|</span>
+                    <button id="btn-crop" class="crop-only" style="display:none" title="裁剪图片">✂️</button>
+                </div>
+                <div id="preview-viewport">
+                    <div id="crop-overlay" style="display:none">
+                        <div id="crop-box">
+                            <div class="crop-handle nw" data-dir="nw"></div>
+                            <div class="crop-handle ne" data-dir="ne"></div>
+                            <div class="crop-handle sw" data-dir="sw"></div>
+                            <div class="crop-handle se" data-dir="se"></div>
+                        </div>
+                    </div>
+                    <div id="preview-placeholder">文件预览区域<br><small>请在左侧项目中选择文件</small></div>
+                    <iframe id="preview-pdf" style="display:none" src="" frameborder="0"></iframe>
+                    <div id="preview-img-wrap" style="display:none">
+                        <img id="preview-img" src="">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右面板：OCR表单 -->
+    <div id="right-panel">
+        <div id="receipt-header">
+            <div class="receipt-company">
+                <input id="info-company" type="text" placeholder="公司名称（自动识别）">
+            </div>
+            <div class="receipt-info">
+                <div class="info-consignee">
+                    <label>收货单位：</label>
+                    <input id="info-consignee" type="text" placeholder="铁科嘉苑饭店">
+                </div>
+                <div class="info-date">
+                    <label>送货日期：</label>
+                    <input id="info-date" type="text" placeholder="自动识别">
+                </div>
+            </div>
+        </div>
+
+        <div id="table-wrap">
+            <table id="data-table">
+                <thead>
+                    <tr>
+                        <th class="col-seq">序号</th>
+                        <th class="col-name">名称</th>
+                        <th class="col-unit">单位</th>
+                        <th class="col-price">购定价<br>(含税)</th>
+                        <th class="col-tax">税率</th>
+                        <th class="col-query">网上询价</th>
+                        <th class="col-qty">数量</th>
+                        <th class="col-total">合计</th>
+                        <th class="col-remark">备注</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <tr><td colspan="9" class="empty-msg">请在左侧选择文件并点击"分析文件"</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="receipt-footer">
+            <div id="legend">
+                <span><span class="dot yellow"></span> 低置信度(0.7~0.9)</span>
+                <span><span class="dot red"></span> 错误(&lt;0.7)</span>
+            </div>
+            <div id="crop-toolbar" style="display:none">
+                <button id="btn-crop-confirm">✓ 确认裁剪</button>
+                <button id="btn-crop-cancel">✕ 取消</button>
+            </div>
+            <div id="footer-actions">
+                <span id="result-info"></span>
+                <button id="btn-add-row">+ 行</button>
+                <button id="btn-analyze" disabled>🔍 分析文件</button>
+                <button id="btn-save">💾 存入</button>
+                <button id="btn-export-form">📥 导出</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== 表格模式 ====== -->
+<div id="table-mode" class="mode-page" style="display:none">
+    <div id="table-mode-header">
+        <select id="table-project-select">
+            <option value="">请选择项目...</option>
+        </select>
+        <span id="table-project-label"></span>
+        <div id="table-mode-actions">
+            <button id="btn-table-add-row">+ 行</button>
+            <button id="btn-table-export">📥 导出Excel</button>
+        </div>
+    </div>
+
+    <div id="table-mode-body">
+        <div class="table-mode-wrap">
+            <table id="excel-table">
+                <thead>
+                    <tr>
+                        <th class="col-seq">序号</th>
+                        <th class="col-name">名称</th>
+                        <th class="col-unit">单位</th>
+                        <th class="col-price">购定价(含税)</th>
+                        <th class="col-tax">税率</th>
+                        <th class="col-query">网上询价</th>
+                        <th class="col-qty">数量</th>
+                        <th class="col-total">合计</th>
+                        <th class="col-remark">备注</th>
+                    </tr>
+                </thead>
+                <tbody id="excel-tbody">
+                    <tr><td colspan="9" class="empty-msg">请先选择一个项目</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Sheet标签栏（底部，Excel风格） -->
+    <div id="sheet-bar">
+        <div id="sheet-tabs"></div>
+        <button id="btn-add-sheet" title="添加Sheet">+</button>
+    </div>
+</div>
+
+<!-- ====== 隐藏的全局文件选择器 ====== -->
+<input type="file" id="global-file-input" hidden accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff,.tif" multiple>
+
+<!-- 加载遮罩 -->
+<div id="loading-overlay" style="display:none">
+    <div class="spinner"></div>
+    <p>正在OCR识别中，请稍候...</p>
+</div>
+
+<script src="static/app.js"></script>
+</body>
+</html>

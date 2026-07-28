@@ -1,0 +1,7 @@
+flask>=3.0
+flask-cors>=4.0
+paddleocr
+onnxruntime
+pymupdf>=1.24
+openpyxl>=3.1
+pillow>=10.0
