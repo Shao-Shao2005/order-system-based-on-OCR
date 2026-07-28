@@ -91,7 +91,7 @@ def api_import_pdf():
     try:
         # 渲染所有页面为PNG（不使用流水线OCR，只渲染）
         image_paths = []
-        for page_num, img_path in _render_pages(saved_path):
+        for page_num, img_path in _render_pages(saved_path, prefix=task_id):
             image_paths.append(img_path)
 
         if not image_paths:

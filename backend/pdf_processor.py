@@ -19,24 +19,24 @@ def pdf_to_images(pdf_path: str) -> list[str]:
     return [path for _, path in _render_pages(pdf_path)]
 
 
-def _render_pages(pdf_path: str):
+def _render_pages(pdf_path: str, prefix: str = ""):
     """
     逐页渲染PDF为PNG的生成器。
-    每渲染完一页就 yield (page_num, image_path)，
-    调用方可以边渲染边提交OCR，实现流水线并行。
 
     Yields:
         (page_num, image_path)
     """
     doc = fitz.open(pdf_path)
-    base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+    # 用传入的纯英文前缀，避免中文文件名导致 OpenCV 读取失败
+    if not prefix:
+        prefix = os.path.splitext(os.path.basename(pdf_path))[0]
     mat = fitz.Matrix(PDF_DPI / 72, PDF_DPI / 72)
 
     try:
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
             pix = page.get_pixmap(matrix=mat)
-            img_filename = f"{base_name}_page{page_num + 1}.png"
+            img_filename = f"{prefix}_page{page_num + 1}.png"
             img_path = os.path.join(CACHE_DIR, img_filename)
             pix.save(img_path)
             yield (page_num, img_path)
