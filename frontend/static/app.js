@@ -235,9 +235,14 @@ function renderProjectCards() {
                     ? '<span class="page-status-dot done" title="已分析"></span>'
                     : '<span class="page-status-dot" title="未分析"></span>';
             }
+            var splitBtn = "";
+            if (f.type === "pdf" && !f.splitDone) {
+                splitBtn = '<span class="file-split" title="按页拆分">⚡</span>';
+            }
             fdiv.innerHTML = '<span class="file-icon">' + icon + '</span>' +
                 '<span class="file-name">' + f.name + '</span>' +
                 statusDot +
+                splitBtn +
                 (f.enhancedBlobUrl ? '<span class="file-scan-done" title="已扫描处理">✅</span>' : '') +
                 (f.type !== "pdf" && f.type !== "pdf-page" ? '<span class="file-scan" title="扫描处理（增亮+锐化）">🔍</span>' : '') +
                 '<span class="file-del">✕</span>';
@@ -252,6 +257,14 @@ function renderProjectCards() {
                 e.stopPropagation();
                 deleteFile(proj.id, fi);
             });
+            // 分裂按钮（PDF→逐页）
+            var splitBtn = fdiv.querySelector(".file-split");
+            if (splitBtn) {
+                splitBtn.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    splitPdf(proj.id, fi);
+                });
+            }
             // 扫描处理按钮
             var scanBtn = fdiv.querySelector(".file-scan");
             if (scanBtn) {
@@ -398,39 +411,20 @@ function addFiles(pid, fileList) {
         var ftype = file.type === "application/pdf" ? "pdf" : "image";
 
         if (ftype === "pdf") {
-            // PDF: 先导入渲染所有页面，不执行OCR
-            loading.style.display = "flex";
-            var fd = new FormData();
-            fd.append("file", file);
-            fetch(API + "/api/import-pdf", { method: "POST", body: fd })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    loading.style.display = "none";
-                    if (data.error) { alert(data.error); return; }
-                    // 为每一页创建独立的 pdf-page 条目
-                    data.pages.forEach(function(page) {
-                        proj.files.push({
-                            name: "第" + (page.page_index + 1) + "页",
-                            type: "pdf-page",
-                            blobUrl: null,
-                            serverPreviewUrl: page.image_url,
-                            scanUrl: page.scan_url,
-                            ocrData: null,
-                            taskId: data.task_id,
-                            pageIndex: page.page_index,
-                            fileObj: null,
-                            enhancedBlobUrl: null,
-                            pdfFileName: file.name
-                        });
-                    });
-                    renderProjectCards();
-                    selectProject(pid);
-                    updateTableModeProjectSelect();
-                })
-                .catch(function(err) {
-                    loading.style.display = "none";
-                    alert("PDF导入失败: " + err.message);
-                });
+            // PDF: 只加一个条目，用户点「分裂」后才拆分页面
+            var blobUrl = URL.createObjectURL(file);
+            proj.files.push({
+                name: file.name,
+                type: "pdf",
+                blobUrl: blobUrl,
+                ocrData: null,
+                fileObj: file,
+                splitTaskId: null,  // 分裂后才有
+                splitDone: false
+            });
+            renderProjectCards();
+            selectProject(pid);
+            updateTableModeProjectSelect();
         } else {
             // 图片: 直接添加（保持原有行为）
             var blobUrl = URL.createObjectURL(file);
@@ -446,6 +440,50 @@ function addFiles(pid, fileList) {
             updateTableModeProjectSelect();
         }
     });
+}
+
+// PDF 分裂：渲染所有页面，拆为独立条目
+function splitPdf(pid, fi) {
+    var proj = projects.find(function(p) { return p.id === pid; });
+    if (!proj) return;
+    var f = proj.files[fi];
+    if (!f || f.type !== "pdf" || !f.fileObj) return;
+
+    loading.style.display = "flex";
+    var fd = new FormData();
+    fd.append("file", f.fileObj);
+    fetch(API + "/api/import-pdf", { method: "POST", body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            loading.style.display = "none";
+            if (data.error) { alert(data.error); return; }
+            // 标记 PDF 已分裂
+            f.splitDone = true;
+            f.splitTaskId = data.task_id;
+            // 在 PDF 条目之后插入页面条目
+            var insertIdx = fi + 1;
+            data.pages.forEach(function(page, i) {
+                proj.files.splice(insertIdx + i, 0, {
+                    name: "第" + (page.page_index + 1) + "页",
+                    type: "pdf-page",
+                    blobUrl: null,
+                    serverPreviewUrl: page.image_url,
+                    scanUrl: page.scan_url,
+                    ocrData: null,
+                    taskId: data.task_id,
+                    pageIndex: page.page_index,
+                    fileObj: null,
+                    enhancedBlobUrl: null,
+                    pdfFileName: f.name
+                });
+            });
+            renderProjectCards();
+            updateTableModeProjectSelect();
+        })
+        .catch(function(err) {
+            loading.style.display = "none";
+            alert("PDF分裂失败: " + err.message);
+        });
 }
 
 function deleteFile(pid, fi) {
