@@ -6,7 +6,6 @@ import os
 import uuid
 import json
 import hashlib
-import threading
 from datetime import datetime
 
 from flask import Flask, request, jsonify, send_file
@@ -16,7 +15,7 @@ from config import (
     UPLOAD_DIR, CACHE_DIR, OUTPUT_DIR,
     ALLOWED_EXTENSIONS, MAX_FILE_SIZE
 )
-from pdf_processor import _render_pages, _count_pages
+from pdf_processor import _render_pages
 from ocr_engine import ocr_image, ocr_images_pipelined
 from table_parser import parse_table
 from excel_exporter import export_excel_multi_sheet, export_excel
@@ -69,28 +68,11 @@ def api_preprocess():
     return send_file(scan_path, mimetype="image/png")
 
 
-def _render_async(task_id: str, pdf_path: str):
-    """后台线程：逐页渲染PDF并更新进度"""
-    try:
-        image_paths = []
-        for page_num, img_path in _render_pages(pdf_path):
-            image_paths.append(img_path)
-            tasks[task_id]["image_paths"] = image_paths
-            tasks[task_id]["progress"]["rendered"] = page_num + 1
-
-        tasks[task_id]["progress"]["status"] = "done"
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        tasks[task_id]["progress"]["status"] = "error"
-        tasks[task_id]["progress"]["error"] = str(e)
-
-
 @app.route("/api/import-pdf", methods=["POST"])
 def api_import_pdf():
     """
-    导入PDF文件：异步渲染所有页面为图片。
-    立即返回 task_id + total_pages，前端通过 /api/import-progress/<task_id> 轮询进度。
+    导入PDF文件：渲染所有页面为图片，返回页面列表（不执行OCR）。
+    前端拿到页面列表后在项目卡片中展示，用户可手动选择单个页面进行OCR。
     """
     file = request.files.get("file")
     if not file or file.filename == "":
@@ -100,76 +82,51 @@ def api_import_pdf():
     if ext != "pdf":
         return jsonify({"error": "仅支持PDF文件，图片文件请直接上传"}), 400
 
+    # 保存PDF
     task_id = uuid.uuid4().hex[:12]
     saved_filename = f"{task_id}.pdf"
     saved_path = os.path.join(UPLOAD_DIR, saved_filename)
     file.save(saved_path)
 
     try:
-        total_pages = _count_pages(saved_path)
-        if total_pages == 0:
+        # 渲染所有页面为PNG（不使用流水线OCR，只渲染）
+        image_paths = []
+        for page_num, img_path in _render_pages(saved_path):
+            image_paths.append(img_path)
+
+        if not image_paths:
             return jsonify({"error": "PDF渲染失败，请检查文件是否有效"}), 400
 
-        # 初始化任务（渲染进行中）
+        # 存储任务数据（不含OCR结果）
         tasks[task_id] = {
-            "image_paths": [],
-            "page_count": total_pages,
+            "image_paths": image_paths,
+            "page_count": len(image_paths),
             "original_filename": file.filename,
             "pdf_path": saved_path,
-            "page_ocr": {},
-            "progress": {"rendered": 0, "total": total_pages, "status": "rendering"},
+            "page_ocr": {},          # page_index → OCR结果，后续按需填充
             "created_at": datetime.now().isoformat(),
         }
 
-        # 启动后台渲染线程
-        t = threading.Thread(target=_render_async, args=(task_id, saved_path), daemon=True)
-        t.start()
+        pages = [
+            {
+                "page_index": i,
+                "image_url": f"/api/image/{task_id}/{i}",
+                "scan_url": f"/api/scan/{task_id}/{i}",
+            }
+            for i in range(len(image_paths))
+        ]
 
         return jsonify({
             "task_id": task_id,
             "filename": file.filename,
-            "total_pages": total_pages,
+            "page_count": len(image_paths),
+            "pages": pages,
         })
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"PDF导入失败: {str(e)}"}), 500
-
-
-@app.route("/api/import-progress/<task_id>", methods=["GET"])
-def api_import_progress(task_id: str):
-    """轮询PDF导入/渲染进度"""
-    task = tasks.get(task_id)
-    if not task:
-        return jsonify({"error": "任务不存在"}), 404
-
-    progress = task.get("progress", {})
-    status = progress.get("status", "done")
-
-    # 渲染完成时返回页面列表
-    if status == "done":
-        image_paths = task.get("image_paths", [])
-        pages = [
-            {"page_index": i, "image_url": f"/api/image/{task_id}/{i}",
-             "scan_url": f"/api/scan/{task_id}/{i}"}
-            for i in range(len(image_paths))
-        ]
-        return jsonify({
-            "status": "done",
-            "rendered": len(image_paths),
-            "total": task.get("page_count", 0),
-            "pages": pages,
-        })
-
-    if status == "error":
-        return jsonify({"status": "error", "error": progress.get("error", "未知错误")}), 500
-
-    return jsonify({
-        "status": "rendering",
-        "rendered": progress.get("rendered", 0),
-        "total": progress.get("total", 0),
-    })
 
 
 @app.route("/api/ocr-page", methods=["POST"])
