@@ -92,6 +92,31 @@ function setProgressIndeterminate(subtitle) {
 function hideProgress() {
     loading.style.display = "none";
 }
+// OCR 分析进度模拟器：匀速递增到 ~85%，响应返回时跳到 100%
+function startOcrProgress() {
+    var pct = 0;
+    var timer = setInterval(function() {
+        // 前 2 秒快速到 30%，之后每 0.2s 递增，渐慢逼近 85%
+        if (pct < 30) {
+            pct += 5;
+        } else if (pct < 70) {
+            pct += 3;
+        } else if (pct < 82) {
+            pct += 1;
+        }
+        setProgress(pct, "正在进行OCR识别...");
+    }, 200);
+    return {
+        done: function() {
+            clearInterval(timer);
+            setProgress(100, "识别完成");
+            setTimeout(hideProgress, 400);
+        },
+        cancel: function() {
+            clearInterval(timer);
+        }
+    };
+}
 
 // ===== 状态 =====
 let projects = [];            // [{id, name, files:[{name, blobUrl, dataUrl, ocrData:null}]}]
@@ -583,7 +608,7 @@ btnAnalyze.addEventListener("click", function() {
 
     // pdf-page: 单页OCR
     if (f.type === "pdf-page") {
-        setProgressIndeterminate("正在进行OCR识别...");
+        var ocrTimer = startOcrProgress();
         fetch(API + "/api/ocr-page", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -591,7 +616,7 @@ btnAnalyze.addEventListener("click", function() {
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            hideProgress();
+            ocrTimer.done();
             btnAnalyze.disabled = false;
             if (data.error) { alert(data.error); return; }
 
@@ -601,19 +626,18 @@ btnAnalyze.addEventListener("click", function() {
             if (!currentHeaderInfo.consignee) currentHeaderInfo.consignee = "铁科嘉苑饭店";
             currentPreviewUrls = data.preview_images || [];
             taskId = f.taskId;
-            // 用OCR检测到的日期更新页面名称
             if (data.header_info && data.header_info.date) {
                 f.name = data.header_info.date;
             } else if (data.dates && data.dates.length > 0) {
                 f.name = data.dates[0];
             }
-            // 标记已分析
             f.ocrData = { rows: data.rows, headerInfo: data.header_info };
             renderForm();
             renderProjectCards();
             if (currentPreviewUrls.length > 0) showOcrPreview(currentPreviewUrls);
         })
         .catch(function(err) {
+            ocrTimer.cancel();
             hideProgress();
             btnAnalyze.disabled = false;
             alert("分析失败: " + err.message);
@@ -621,16 +645,16 @@ btnAnalyze.addEventListener("click", function() {
         return;
     }
 
-    // 图片: 直接上传OCR（原有逻辑）
+    // 图片: 直接上传OCR
     if (!f.fileObj) { hideProgress(); btnAnalyze.disabled = false; return; }
-    setProgressIndeterminate("正在进行OCR识别...");
+    var imgTimer = startOcrProgress();
     var fd = new FormData();
     fd.append("file", f.fileObj);
 
     fetch(API + "/api/upload", { method:"POST", body:fd })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            hideProgress();
+            imgTimer.done();
             btnAnalyze.disabled = false;
             if (data.error) { alert(data.error); return; }
 
@@ -644,6 +668,7 @@ btnAnalyze.addEventListener("click", function() {
             if (currentPreviewUrls.length > 0) showOcrPreview(currentPreviewUrls);
         })
         .catch(function(err) {
+            imgTimer.cancel();
             hideProgress();
             btnAnalyze.disabled = false;
             alert("分析失败: " + err.message);
