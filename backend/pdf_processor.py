@@ -6,6 +6,15 @@ import fitz  # PyMuPDF
 from config import CACHE_DIR, PDF_DPI
 
 
+def _count_pages(pdf_path: str) -> int:
+    """快速获取PDF页数，不渲染"""
+    doc = fitz.open(pdf_path)
+    try:
+        return len(doc)
+    finally:
+        doc.close()
+
+
 def pdf_to_images(pdf_path: str) -> list[str]:
     """
     将PDF文件每一页渲染为PNG图片（一次性返回全部）

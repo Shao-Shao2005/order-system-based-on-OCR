@@ -684,15 +684,45 @@ button:disabled{ opacity:.4; cursor:not-allowed; transform:none }
   align-items: center; justify-content: center;
   z-index: 9999;
 }
-#loading-overlay p{ color: #fff; margin-top: var(--sp-4); font-size: 14px; font-weight: 500 }
-.spinner{
-  width: 36px; height: 36px;
-  border: 3px solid rgba(255,255,255,.2);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin .65s linear infinite;
+.loading-card{
+  background: var(--surface);
+  border-radius: var(--r-2xl);
+  padding: 40px 48px;
+  min-width: 360px;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
 }
-@keyframes spin{ to{ transform:rotate(360deg) } }
+#loading-title{
+  font-size: 15px; font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-5);
+}
+.progress-bar{
+  width: 100%; height: 6px;
+  background: var(--gray-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#progress-fill{
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--blue-5), var(--blue-6));
+  border-radius: 4px;
+  transition: width .4s var(--ease-out);
+}
+/* Indeterminate animation */
+#progress-fill.indeterminate{
+  width: 30%;
+  animation: progress-sweep 1.4s var(--ease-out) infinite;
+}
+@keyframes progress-sweep{
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(430%); }
+}
+#loading-subtitle{
+  margin-top: var(--sp-4);
+  font-size: 13px; color: var(--text-secondary);
+  min-height: 20px;
+}
 
 /* ===== Scrollbar ===== */
 ::-webkit-scrollbar{ width:5px; height:5px }

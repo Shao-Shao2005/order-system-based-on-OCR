@@ -68,6 +68,30 @@ const btnTableExport = el("#btn-table-export");
 
 // 全局文件选择器
 const globalFileInput = el("#global-file-input");
+const progressFill    = el("#progress-fill");
+const loadingTitle    = el("#loading-title");
+const loadingSubtitle = el("#loading-subtitle");
+
+// ===== 进度条工具函数 =====
+function showProgress(title, subtitle) {
+    loadingTitle.textContent = title || "正在处理...";
+    loadingSubtitle.textContent = subtitle || "";
+    progressFill.className = "";
+    progressFill.style.width = "0%";
+    loading.style.display = "flex";
+}
+function setProgress(pct, subtitle) {
+    progressFill.className = "";
+    progressFill.style.width = Math.min(100, Math.max(0, pct)) + "%";
+    if (subtitle) loadingSubtitle.textContent = subtitle;
+}
+function setProgressIndeterminate(subtitle) {
+    progressFill.className = "indeterminate";
+    loadingSubtitle.textContent = subtitle || "";
+}
+function hideProgress() {
+    loading.style.display = "none";
+}
 
 // ===== 状态 =====
 let projects = [];            // [{id, name, files:[{name, blobUrl, dataUrl, ocrData:null}]}]
@@ -398,39 +422,68 @@ function addFiles(pid, fileList) {
         var ftype = file.type === "application/pdf" ? "pdf" : "image";
 
         if (ftype === "pdf") {
-            // PDF: 先导入渲染所有页面，不执行OCR
-            loading.style.display = "flex";
+            // PDF: 先导入渲染所有页面，不执行OCR（异步+进度条）
+            showProgress("正在导入 " + file.name, "上传中...");
             var fd = new FormData();
             fd.append("file", file);
             fetch(API + "/api/import-pdf", { method: "POST", body: fd })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
-                    loading.style.display = "none";
-                    if (data.error) { alert(data.error); return; }
-                    // 为每一页创建独立的 pdf-page 条目
-                    data.pages.forEach(function(page) {
-                        proj.files.push({
-                            name: "第" + (page.page_index + 1) + "页",
-                            type: "pdf-page",
-                            blobUrl: null,
-                            serverPreviewUrl: page.image_url,
-                            scanUrl: page.scan_url,
-                            ocrData: null,
-                            taskId: data.task_id,
-                            pageIndex: page.page_index,
-                            fileObj: null,
-                            enhancedBlobUrl: null,
-                            pdfFileName: file.name
-                        });
-                    });
-                    renderProjectCards();
-                    selectProject(pid);
-                    updateTableModeProjectSelect();
+                    if (data.error) { hideProgress(); alert(data.error); return; }
+                    // 开始轮询渲染进度
+                    pollImportProgress(data.task_id, file.name, pid, proj);
                 })
                 .catch(function(err) {
-                    loading.style.display = "none";
+                    hideProgress();
                     alert("PDF导入失败: " + err.message);
                 });
+
+        // 轮询PDF渲染进度
+        function pollImportProgress(taskId, fileName, pid, proj) {
+            var totalPages = 0;
+            function poll() {
+                fetch(API + "/api/import-progress/" + taskId)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.status === "error") {
+                            hideProgress(); alert("渲染失败: " + data.error);
+                            return;
+                        }
+                        if (data.status === "rendering") {
+                            totalPages = data.total;
+                            var pct = Math.round(data.rendered / data.total * 100);
+                            setProgress(pct, "正在渲染第 " + data.rendered + "/" + data.total + " 页...");
+                            setTimeout(poll, 300);
+                        } else if (data.status === "done") {
+                            setProgress(100, "渲染完成，共 " + data.total + " 页");
+                            // 短暂显示100%后关闭
+                            setTimeout(function() {
+                                hideProgress();
+                                data.pages.forEach(function(page) {
+                                    proj.files.push({
+                                        name: "第" + (page.page_index + 1) + "页",
+                                        type: "pdf-page",
+                                        blobUrl: null,
+                                        serverPreviewUrl: page.image_url,
+                                        scanUrl: page.scan_url,
+                                        ocrData: null,
+                                        taskId: taskId,
+                                        pageIndex: page.page_index,
+                                        fileObj: null,
+                                        enhancedBlobUrl: null,
+                                        pdfFileName: fileName
+                                    });
+                                });
+                                renderProjectCards();
+                                selectProject(pid);
+                                updateTableModeProjectSelect();
+                            }, 500);
+                        }
+                    })
+                    .catch(function() { hideProgress(); alert("进度查询失败"); });
+            }
+            poll();
+        }
         } else {
             // 图片: 直接添加（保持原有行为）
             var blobUrl = URL.createObjectURL(file);
@@ -525,11 +578,12 @@ btnAnalyze.addEventListener("click", function() {
     var f = proj.files[activeFileIdx];
     if (!f) return;
 
-    loading.style.display = "flex";
+    showProgress("正在进行OCR识别...", f.name);
     btnAnalyze.disabled = true;
 
     // pdf-page: 单页OCR
     if (f.type === "pdf-page") {
+        setProgressIndeterminate("正在进行OCR识别...");
         fetch(API + "/api/ocr-page", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -537,7 +591,7 @@ btnAnalyze.addEventListener("click", function() {
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            loading.style.display = "none";
+            hideProgress();
             btnAnalyze.disabled = false;
             if (data.error) { alert(data.error); return; }
 
@@ -560,7 +614,7 @@ btnAnalyze.addEventListener("click", function() {
             if (currentPreviewUrls.length > 0) showOcrPreview(currentPreviewUrls);
         })
         .catch(function(err) {
-            loading.style.display = "none";
+            hideProgress();
             btnAnalyze.disabled = false;
             alert("分析失败: " + err.message);
         });
@@ -568,14 +622,15 @@ btnAnalyze.addEventListener("click", function() {
     }
 
     // 图片: 直接上传OCR（原有逻辑）
-    if (!f.fileObj) { loading.style.display = "none"; btnAnalyze.disabled = false; return; }
+    if (!f.fileObj) { hideProgress(); btnAnalyze.disabled = false; return; }
+    setProgressIndeterminate("正在进行OCR识别...");
     var fd = new FormData();
     fd.append("file", f.fileObj);
 
     fetch(API + "/api/upload", { method:"POST", body:fd })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            loading.style.display = "none";
+            hideProgress();
             btnAnalyze.disabled = false;
             if (data.error) { alert(data.error); return; }
 
@@ -589,7 +644,7 @@ btnAnalyze.addEventListener("click", function() {
             if (currentPreviewUrls.length > 0) showOcrPreview(currentPreviewUrls);
         })
         .catch(function(err) {
-            loading.style.display = "none";
+            hideProgress();
             btnAnalyze.disabled = false;
             alert("分析失败: " + err.message);
         });
