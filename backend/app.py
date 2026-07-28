@@ -68,6 +68,144 @@ def api_preprocess():
     return send_file(scan_path, mimetype="image/png")
 
 
+@app.route("/api/import-pdf", methods=["POST"])
+def api_import_pdf():
+    """
+    导入PDF文件：渲染所有页面为图片，返回页面列表（不执行OCR）。
+    前端拿到页面列表后在项目卡片中展示，用户可手动选择单个页面进行OCR。
+    """
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        return jsonify({"error": "请选择文件"}), 400
+
+    ext = get_file_extension(file.filename)
+    if ext != "pdf":
+        return jsonify({"error": "仅支持PDF文件，图片文件请直接上传"}), 400
+
+    # 保存PDF
+    task_id = uuid.uuid4().hex[:12]
+    saved_filename = f"{task_id}.pdf"
+    saved_path = os.path.join(UPLOAD_DIR, saved_filename)
+    file.save(saved_path)
+
+    try:
+        # 渲染所有页面为PNG（不使用流水线OCR，只渲染）
+        image_paths = []
+        for page_num, img_path in _render_pages(saved_path):
+            image_paths.append(img_path)
+
+        if not image_paths:
+            return jsonify({"error": "PDF渲染失败，请检查文件是否有效"}), 400
+
+        # 存储任务数据（不含OCR结果）
+        tasks[task_id] = {
+            "image_paths": image_paths,
+            "page_count": len(image_paths),
+            "original_filename": file.filename,
+            "pdf_path": saved_path,
+            "page_ocr": {},          # page_index → OCR结果，后续按需填充
+            "created_at": datetime.now().isoformat(),
+        }
+
+        pages = [
+            {
+                "page_index": i,
+                "image_url": f"/api/image/{task_id}/{i}",
+                "scan_url": f"/api/scan/{task_id}/{i}",
+            }
+            for i in range(len(image_paths))
+        ]
+
+        return jsonify({
+            "task_id": task_id,
+            "filename": file.filename,
+            "page_count": len(image_paths),
+            "pages": pages,
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"PDF导入失败: {str(e)}"}), 500
+
+
+@app.route("/api/ocr-page", methods=["POST"])
+def api_ocr_page():
+    """
+    对已导入PDF的单个页面执行OCR识别和表格解析。
+    请求体: {task_id, page_index}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "请提供JSON数据"}), 400
+
+    task_id = data.get("task_id", "")
+    page_index = data.get("page_index", 0)
+
+    task = tasks.get(task_id)
+    if not task:
+        return jsonify({"error": "任务不存在或已过期，请重新导入PDF"}), 404
+
+    image_paths = task["image_paths"]
+    if page_index < 0 or page_index >= len(image_paths):
+        return jsonify({"error": f"页码无效，有效范围: 0~{len(image_paths) - 1}"}), 400
+
+    image_path = image_paths[page_index]
+
+    # 检查是否已有缓存的OCR结果
+    if page_index in task.get("page_ocr", {}):
+        cached = task["page_ocr"][page_index]
+        return jsonify(cached)
+
+    try:
+        # 单页OCR
+        blocks = ocr_image(image_path)
+        if not blocks:
+            return jsonify({
+                "error": f"第{page_index + 1}页未识别到文字",
+                "page_index": page_index,
+            }), 400
+
+        # 表格解析
+        result = parse_table(blocks, filename=task.get("original_filename", ""))
+
+        # 如果日期分组为空，尝试用头部日期
+        date_groups = result.get("date_groups", {})
+        dates = result.get("dates", [])
+        header_info = result.get("header_info", {})
+        rows = result.get("rows", [])
+
+        if not date_groups and rows:
+            header_date = header_info.get("date", "").strip() if header_info else ""
+            if header_date:
+                date_groups = {header_date: rows}
+                dates = [header_date]
+            else:
+                date_groups = {"全部": rows}
+                dates = ["全部"]
+
+        response_data = {
+            "task_id": task_id,
+            "page_index": page_index,
+            "rows": rows,
+            "date_groups": date_groups,
+            "dates": dates,
+            "header_info": header_info,
+            "warnings": result.get("warnings", []),
+            "preview_images": [f"/api/image/{task_id}/{page_index}"],
+        }
+
+        # 缓存结果
+        task.setdefault("page_ocr", {})[page_index] = response_data
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"OCR处理失败: {str(e)}"}), 500
+
+
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """
@@ -290,6 +428,13 @@ def api_delete_task(task_id: str):
         for path in task.get("image_paths", []):
             try:
                 os.remove(path)
+            except OSError:
+                pass
+        # 清理保存的PDF文件
+        pdf_path = task.get("pdf_path", "")
+        if pdf_path and os.path.exists(pdf_path):
+            try:
+                os.remove(pdf_path)
             except OSError:
                 pass
     return jsonify({"ok": True})

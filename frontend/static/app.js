@@ -84,6 +84,8 @@ let taskId = null;
 let fileBlobUrl = null, fileDataUrl = null;
 let sidebarCollapsed = false;
 let showScanPreview = true;  // OCR后默认显示扫描件
+let currentScanUrl = null;   // pdf-page 扫描件URL
+let currentImageUrl = null;  // pdf-page 原图URL
 
 // 裁剪状态
 let cropMode = false;
@@ -138,7 +140,7 @@ function goPage(idx) {
 
 // ===== 文件预览 =====
 function showPreview(blobUrl, fileType) {
-    if (fileBlobUrl && fileBlobUrl !== blobUrl) URL.revokeObjectURL(fileBlobUrl);
+    if (fileBlobUrl && fileBlobUrl !== blobUrl && fileBlobUrl.startsWith("blob:")) URL.revokeObjectURL(fileBlobUrl);
     fileBlobUrl = blobUrl;
     placeholder.style.display = "none";
     ocrPages = []; totalPages = 0; curPage = 0;
@@ -226,10 +228,18 @@ function renderProjectCards() {
         (proj.files || []).forEach(function(f, fi) {
             var fdiv = document.createElement("div");
             fdiv.className = "card-file" + (proj.id === activeProjectId && fi === activeFileIdx ? " active" : "");
-            fdiv.innerHTML = '<span class="file-icon">' + (f.type === "pdf" ? "📄" : "🖼") + '</span>' +
+            var icon = f.type === "pdf-page" ? "📑" : (f.type === "pdf" ? "📄" : "🖼");
+            var statusDot = "";
+            if (f.type === "pdf-page") {
+                statusDot = f.ocrData
+                    ? '<span class="page-status-dot done" title="已分析"></span>'
+                    : '<span class="page-status-dot" title="未分析"></span>';
+            }
+            fdiv.innerHTML = '<span class="file-icon">' + icon + '</span>' +
                 '<span class="file-name">' + f.name + '</span>' +
+                statusDot +
                 (f.enhancedBlobUrl ? '<span class="file-scan-done" title="已扫描处理">✅</span>' : '') +
-                (f.type !== "pdf" ? '<span class="file-scan" title="扫描处理（增亮+锐化）">🔍</span>' : '') +
+                (f.type !== "pdf" && f.type !== "pdf-page" ? '<span class="file-scan" title="扫描处理（增亮+锐化）">🔍</span>' : '') +
                 '<span class="file-del">✕</span>';
 
             // 点击选中文件
@@ -386,18 +396,56 @@ function addFiles(pid, fileList) {
     if (!proj) return;
     Array.from(fileList).forEach(function(file) {
         var ftype = file.type === "application/pdf" ? "pdf" : "image";
-        var blobUrl = URL.createObjectURL(file);
-        proj.files.push({
-            name: file.name,
-            type: ftype,
-            blobUrl: blobUrl,
-            ocrData: null,
-            fileObj: file
-        });
+
+        if (ftype === "pdf") {
+            // PDF: 先导入渲染所有页面，不执行OCR
+            loading.style.display = "flex";
+            var fd = new FormData();
+            fd.append("file", file);
+            fetch(API + "/api/import-pdf", { method: "POST", body: fd })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    loading.style.display = "none";
+                    if (data.error) { alert(data.error); return; }
+                    // 为每一页创建独立的 pdf-page 条目
+                    data.pages.forEach(function(page) {
+                        proj.files.push({
+                            name: "第" + (page.page_index + 1) + "页",
+                            type: "pdf-page",
+                            blobUrl: null,
+                            serverPreviewUrl: page.image_url,
+                            scanUrl: page.scan_url,
+                            ocrData: null,
+                            taskId: data.task_id,
+                            pageIndex: page.page_index,
+                            fileObj: null,
+                            enhancedBlobUrl: null,
+                            pdfFileName: file.name
+                        });
+                    });
+                    renderProjectCards();
+                    selectProject(pid);
+                    updateTableModeProjectSelect();
+                })
+                .catch(function(err) {
+                    loading.style.display = "none";
+                    alert("PDF导入失败: " + err.message);
+                });
+        } else {
+            // 图片: 直接添加（保持原有行为）
+            var blobUrl = URL.createObjectURL(file);
+            proj.files.push({
+                name: file.name,
+                type: ftype,
+                blobUrl: blobUrl,
+                ocrData: null,
+                fileObj: file
+            });
+            renderProjectCards();
+            selectProject(pid);
+            updateTableModeProjectSelect();
+        }
     });
-    renderProjectCards();
-    selectProject(pid);
-    updateTableModeProjectSelect();
 }
 
 function deleteFile(pid, fi) {
@@ -431,6 +479,18 @@ function selectFile(pid, fi) {
     renderProjectCards();
     btnAnalyze.disabled = false;  // 只要选中了文件就启用
 
+    // PDF页面：用服务端渲染的图片预览
+    if (f.type === "pdf-page") {
+        currentImageUrl = API + f.serverPreviewUrl;
+        currentScanUrl = API + (f.scanUrl || f.serverPreviewUrl);
+        showPreview(currentImageUrl, "image");
+        // 启用扫描件切换
+        btnToggleScan.style.display = "";
+        showScanPreview = true;
+        btnToggleScan.textContent = "📷";
+        return;
+    }
+
     // PDF 直接预览
     if (f.type === "pdf") {
         showPreview(f.blobUrl, "pdf");
@@ -463,12 +523,54 @@ btnAnalyze.addEventListener("click", function() {
     var proj = projects.find(function(p) { return p.id === activeProjectId; });
     if (!proj) return;
     var f = proj.files[activeFileIdx];
-    if (!f || !f.fileObj) return;
+    if (!f) return;
 
-    var fd = new FormData();
-    fd.append("file", f.fileObj);
     loading.style.display = "flex";
     btnAnalyze.disabled = true;
+
+    // pdf-page: 单页OCR
+    if (f.type === "pdf-page") {
+        fetch(API + "/api/ocr-page", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task_id: f.taskId, page_index: f.pageIndex })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            loading.style.display = "none";
+            btnAnalyze.disabled = false;
+            if (data.error) { alert(data.error); return; }
+
+            currentOcrRows = data.rows || [];
+            dateGroups = data.date_groups || {};
+            currentHeaderInfo = data.header_info || {};
+            if (!currentHeaderInfo.consignee) currentHeaderInfo.consignee = "铁科嘉苑饭店";
+            currentPreviewUrls = data.preview_images || [];
+            taskId = f.taskId;
+            // 用OCR检测到的日期更新页面名称
+            if (data.header_info && data.header_info.date) {
+                f.name = data.header_info.date;
+            } else if (data.dates && data.dates.length > 0) {
+                f.name = data.dates[0];
+            }
+            // 标记已分析
+            f.ocrData = { rows: data.rows, headerInfo: data.header_info };
+            renderForm();
+            renderProjectCards();
+            if (currentPreviewUrls.length > 0) showOcrPreview(currentPreviewUrls);
+        })
+        .catch(function(err) {
+            loading.style.display = "none";
+            btnAnalyze.disabled = false;
+            alert("分析失败: " + err.message);
+        });
+        return;
+    }
+
+    // 图片: 直接上传OCR（原有逻辑）
+    if (!f.fileObj) { loading.style.display = "none"; btnAnalyze.disabled = false; return; }
+    var fd = new FormData();
+    fd.append("file", f.fileObj);
 
     fetch(API + "/api/upload", { method:"POST", body:fd })
         .then(function(r) { return r.json(); })
@@ -482,6 +584,7 @@ btnAnalyze.addEventListener("click", function() {
             currentHeaderInfo = data.header_info || {};
             if (!currentHeaderInfo.consignee) currentHeaderInfo.consignee = "铁科嘉苑饭店";
             currentPreviewUrls = data.preview_images || [];
+            taskId = data.task_id;
             renderForm();
             if (currentPreviewUrls.length > 0) showOcrPreview(currentPreviewUrls);
         })
@@ -959,7 +1062,14 @@ btnZoomOut.addEventListener("click", zoomOut);
 btnZoomFit.addEventListener("click", zoomFit);
 btnToggleScan.addEventListener("click", function() {
     showScanPreview = !showScanPreview;
-    goPage(curPage);
+    btnToggleScan.textContent = showScanPreview ? "📷" : "🖼";
+    if (previewMode === "ocr") {
+        goPage(curPage);
+    } else if (previewMode === "img" && currentScanUrl) {
+        // pdf-page 单页预览：直接切换图片源
+        var imgUrl = showScanPreview ? currentScanUrl : currentImageUrl;
+        previewImg.src = imgUrl;
+    }
 });
 zoomSlider.addEventListener("input", function() { applyZoom(parseInt(zoomSlider.value)); });
 btnPagePrev.addEventListener("click", function() { goPage(curPage - 1); });
